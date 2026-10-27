@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Restauração Saveiro 2006/2007</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #f4f6f9; color: #333; padding: 15px; max-width: 600px; margin: 0 auto; }
+    h1 { text-align: center; color: #1e293b; margin-bottom: 5px; font-size: 1.4rem; }
+    .subtitle { text-align: center; color: #64748b; font-size: 0.85rem; margin-bottom: 15px; }
+    
+    .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    .total-card { background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; text-align: center; }
+    .total-card h2 { font-size: 0.9rem; opacity: 0.9; font-weight: 500; }
+    .total-card .val { font-size: 2rem; font-weight: bold; margin-top: 5px; }
+    
+    label { font-size: 0.8rem; font-weight: bold; color: #475569; display: block; margin-top: 8px; margin-bottom: 3px; }
+    input, select, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.95rem; margin-bottom: 8px; outline: none; }
+    input:focus, select:focus { border-color: #2563eb; }
+    
+    button.btn-add { background-color: #16a34a; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; font-size: 1rem; }
+    button.btn-add:hover { background-color: #15803d; }
+    
+    .item-list { list-style: none; margin-top: 10px; }
+    .item-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .item-info { display: flex; flex-direction: column; }
+    .item-title { font-weight: bold; font-size: 0.95rem; color: #1e293b; }
+    .item-sub { font-size: 0.75rem; color: #64748b; }
+    .item-val { font-weight: bold; color: #dc2626; font-size: 0.95rem; }
+    .btn-del { background: none; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; padding: 0 5px; width: auto; margin: 0; }
+    .btn-del:hover { color: #ef4444; }
+
+    canvas { max-height: 220px; }
+  </style>
+</head>
+<body>
+
+  <h1>🛻 Saveiro 2006/2007</h1>
+  <p class="subtitle">Controle de Gastos da Restauração</p>
+
+  <div class="card total-card">
+    <h2>TOTAL INVESTIDO</h2>
+    <div class="val" id="totalGasto">R$ 0,00</div>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:1rem; margin-bottom:10px;">➕ Cadastrar Novo Gasto</h3>
+    
+    <label for="peca">Nome da Peça / Serviço</label>
+    <input type="text" id="peca" placeholder="Ex: Bateria, Pneus, Funilaria">
+
+    <label for="categoria">Categoria</label>
+    <select id="categoria">
+      <option value="Mecânica">Mecânica / Motor</option>
+      <option value="Funilaria & Pintura">Funilaria & Pintura</option>
+      <option value="Acessórios & Peças">Acessórios & Peças</option>
+      <option value="Elétrica">Elétrica</option>
+      <option value="Outros">Outros</option>
+    </select>
+
+    <label for="valor">Valor (R$)</label>
+    <input type="number" step="0.01" id="valor" placeholder="0,00">
+
+    <button class="btn-add" onclick="adicionarGasto()">Salvar Gasto</button>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:1rem; margin-bottom:10px;">📊 Distribuição dos Gastos</h3>
+    <canvas id="graficoGastos"></canvas>
+  </div>
+
+  <div class="card">
+    <h3 style="font-size:1rem; margin-bottom:10px;">📝 Histórico de Compras</h3>
+    <ul class="item-list" id="listaItens"></ul>
+  </div>
+
+  <script>
+    let gastos = JSON.parse(localStorage.getItem('saveiro_gastos')) || [];
+    let meuGrafico = null;
+
+    function salvarEMostrar() {
+      localStorage.setItem('saveiro_gastos', JSON.stringify(gastos));
+      atualizarLista();
+      atualizarTotal();
+      atualizarGrafico();
+    }
+
+    function adicionarGasto() {
+      const peca = document.getElementById('peca').value.trim();
+      const categoria = document.getElementById('categoria').value;
+      const valor = parseFloat(document.getElementById('valor').value);
+
+      if (!peca || isNaN(valor) || valor <= 0) {
+        alert("Por favor, preencha o nome da peça e um valor válido!");
+        return;
+      }
+
+      const novoGasto = {
+        id: Date.now(),
+        peca: peca,
+        categoria: categoria,
+        valor: valor,
+        data: new Date().toLocaleDateString('pt-BR')
+      };
+
+      gastos.unshift(novoGasto);
+      salvarEMostrar();
+
+      document.getElementById('peca').value = '';
+      document.getElementById('valor').value = '';
+    }
+
+    function removerGasto(id) {
+      if (confirm("Tem certeza que quer remover este item?")) {
+        gastos = gastos.filter(item => item.id !== id);
+        salvarEMostrar();
+      }
+    }
+
+    function atualizarTotal() {
+      const total = gastos.reduce((acc, item) => acc + item.valor, 0);
+      document.getElementById('totalGasto').innerText = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function atualizarLista() {
+      const lista = document.getElementById('listaItens');
+      lista.innerHTML = '';
+
+      if (gastos.length === 0) {
+        lista.innerHTML = '<p style="text-align:center; color:#94a3b8; font-size:0.85rem;">Nenhum gasto cadastrado ainda.</p>';
+        return;
+      }
+
+      gastos.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'item-card';
+        li.innerHTML = `
+          <div class="item-info">
+            <span class="item-title">${item.peca}</span>
+            <span class="item-sub">${item.categoria} • ${item.data}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="item-val">R$ ${item.valor.toFixed(2).replace('.', ',')}</span>
+            <button class="btn-del" onclick="removerGasto(${item.id})">🗑️</button>
+          </div>
+        `;
+        lista.appendChild(li);
+      });
+    }
+
+    function atualizarGrafico() {
+      const categorias = {};
+      gastos.forEach(item => {
+        categorias[item.categoria] = (categorias[item.categoria] || 0) + item.valor;
+      });
+
+      const labels = Object.keys(categorias);
+      const data = Object.values(categorias);
+
+      const ctx = document.getElementById('graficoGastos').getContext('2d');
+
+      if (meuGrafico) {
+        meuGrafico.destroy();
+      }
+
+      meuGrafico = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: ['#2563eb', '#16a34a', '#f59e0b', '#dc2626', '#8b5cf6']
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' }
+          }
+        }
+      });
+    }
+
+    // Inicializa a tela
+    salvarEMostrar();
+  </script>
+</body>
+</html>
